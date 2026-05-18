@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SarkariPhoto - 1-Click Exam Photo Resizer</title>
+    <style>
+        /* Modern & Clean CSS */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background-color: #ffffff;
+            width: 100%;
+            max-width: 500px;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+        }
+        h2 {
+            text-align: center;
+            color: #1f2937;
+            margin-top: 0;
+        }
+        p.subtitle {
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #374151;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            box-sizing: border-box;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus {
+            border-color: #3b82f6;
+        }
+        .flex-row {
+            display: flex;
+            gap: 10px;
+        }
+        .flex-row > div {
+            flex: 1;
+        }
+        .preview-box {
+            margin-top: 20px;
+            text-align: center;
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 15px;
+            background-color: #f9fafb;
+        }
+        canvas {
+            max-width: 100%;
+            border: 1px solid #e5e7eb;
+            display: none;
+            margin: 0 auto;
+        }
+        button {
+            width: 100%;
+            background-color: #2563eb;
+            color: white;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.3s;
+            display: none;
+        }
+        button:hover {
+            background-color: #1d4ed8;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>SarkariPhoto Maker 📸</h2>
+    <p class="subtitle">Auto-resize your photo & add Name/Date instantly.</p>
+
+    <div class="form-group">
+        <label>Select Exam Type</label>
+        <select id="examType" onchange="toggleCustomInputs(); processImage()">
+            <option value="standard">SSC / Railway / UPSC (3.5cm x 4.5cm)</option>
+            <option value="jee">JEE Mains & Advanced (3.5cm x 4.5cm)</option>
+            <option value="neet_pass">NTA NEET Passport (3.5cm x 4.5cm)</option>
+            <option value="neet_post">NTA NEET Postcard (4" x 6")</option>
+            <option value="custom">Custom Size (Enter CM)</option>
+        </select>
+    </div>
+
+    <!-- Hidden by default, shows only when "Custom Size" is selected -->
+    <div id="customSizeDiv" class="form-group" style="display: none;">
+        <div class="flex-row">
+            <div>
+                <label>Width (cm)</label>
+                <input type="number" id="customW" placeholder="3.5" value="3.5" oninput="processImage()" step="0.1">
+            </div>
+            <div>
+                <label>Height (cm)</label>
+                <input type="number" id="customH" placeholder="4.5" value="4.5" oninput="processImage()" step="0.1">
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label>Candidate Name (Optional)</label>
+        <input type="text" id="candidateName" placeholder="Enter Full Name" oninput="processImage()">
+    </div>
+
+    <div class="form-group">
+        <label>Date of Photo (Optional)</label>
+        <input type="date" id="photoDate" onchange="processImage()">
+    </div>
+
+    <div class="form-group">
+        <label>Upload Original Photo</label>
+        <!-- Fixed to only accept jpg and png to avoid HEIC issues -->
+        <input type="file" id="uploadImage" accept=".jpg, .jpeg, .png" onchange="processImage()">
+    </div>
+
+    <div class="preview-box">
+        <span id="placeholderText" style="color:#9ca3af; font-size:14px;">Your preview will appear here</span>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <button id="downloadBtn" onclick="downloadPhoto()">Download Photo (~30KB)</button>
+</div>
+
+<script>
+    let uploadedImage = null;
+
+    // Show or hide custom width/height inputs based on dropdown selection
+    function toggleCustomInputs() {
+        const type = document.getElementById('examType').value;
+        const customDiv = document.getElementById('customSizeDiv');
+        if (type === 'custom') {
+            customDiv.style.display = 'block';
+        } else {
+            customDiv.style.display = 'none';
+        }
+    }
+
+    function processImage() {
+        const fileInput = document.getElementById('uploadImage');
+        if (!fileInput.files[0] && !uploadedImage) return;
+
+        if (fileInput.files[0] && !uploadedImage) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    uploadedImage = img;
+                    drawCanvas();
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(fileInput.files[0]);
+        } else {
+            drawCanvas(); 
+        }
+    }
+
+    function drawCanvas() {
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const nameText = document.getElementById('candidateName').value;
+        const dateText = document.getElementById('photoDate').value;
+        const examType = document.getElementById('examType').value;
+        
+        document.getElementById('placeholderText').style.display = 'none';
+        canvas.style.display = 'block';
+        document.getElementById('downloadBtn').style.display = 'block';
+
+        // Set default dimensions (Scaling up slightly for better preview quality)
+        let targetWidth = 350; 
+        let targetHeight = 450;
+
+        // Change dimensions based on exam selection
+        if (examType === 'neet_post') {
+            // NTA NEET Postcard is 4x6 inches. Using a 4:6 ratio scale.
+            targetWidth = 400;
+            targetHeight = 600;
+        } else if (examType === 'custom') {
+            // Convert user's CM input to Pixels (Approximate scale 1cm = 100px)
+            const cw = parseFloat(document.getElementById('customW').value) || 3.5;
+            const ch = parseFloat(document.getElementById('customH').value) || 4.5;
+            targetWidth = cw * 100;
+            targetHeight = ch * 100;
+        }
+
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        let textStripHeight = (nameText || dateText) ? (targetHeight * 0.15) : 0; 
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw the uploaded image
+        ctx.drawImage(uploadedImage, 0, 0, targetWidth, targetHeight - textStripHeight);
+
+        // Draw Name and Date Strip
+        if (nameText || dateText) {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, targetHeight - textStripHeight, targetWidth, textStripHeight);
+            
+            ctx.fillStyle = "#000000";
+            ctx.textAlign = "center";
+            
+            // Adjust font size based on image width to keep it responsive
+            let fontSize = Math.floor(targetWidth * 0.05); 
+            ctx.font = `bold ${fontSize}px Arial`;
+            
+            let textY = targetHeight - (textStripHeight / 2);
+            
+            if (nameText && dateText) {
+                ctx.fillText(nameText, targetWidth / 2, textY - 5);
+                const dateObj = new Date(dateText);
+                const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${dateObj.getFullYear()}`;
+                ctx.fillText(formattedDate, targetWidth / 2, textY + fontSize + 5);
+            } else if (nameText) {
+                ctx.fillText(nameText, targetWidth / 2, textY + (fontSize/3));
+            } else if (dateText) {
+                const dateObj = new Date(dateText);
+                const formattedDate = `${String(dateObj.getDate()).padStart(2, '0')}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${dateObj.getFullYear()}`;
+                ctx.fillText(formattedDate, targetWidth / 2, textY + (fontSize/3));
+            }
+        }
+    }
+
+    function downloadPhoto() {
+        const canvas = document.getElementById('canvas');
+        const dataURL = canvas.toDataURL('image/jpeg', 0.6); 
+        
+        const link = document.createElement('a');
+        link.download = 'SarkariPhoto_Resized.jpg';
+        link.href = dataURL;
+        link.click();
+    }
+</script>
+
+</body>
+</html>
